@@ -61,16 +61,19 @@ export function activate(context: vscode.ExtensionContext) {
       const text = editor.document.getText(d.range);
       const match = text.match(/\[([^\]]+)\]\(([^\)]+)\)/);
       if (match) {
-        const [fullMatch, linkText, url] = match;
+        const [_, linkText, url] = match;
+        const startOffset = editor.document.offsetAt(d.range.start);
+        const urlStartOffset = startOffset + linkText.length + 2;
+        const urlStartPos = editor.document.positionAt(urlStartOffset);
         return {
-          range: d.range,
+          range: new vscode.Range(urlStartPos, d.range.end),
           renderOptions: {
             before: {
-              contentText: `[${linkText}](...)`
+              contentText: `(...)`
             },
             rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
           },
-          hoverMessage: new vscode.MarkdownString(`${fullMatch}\n\nFull URL: ${url}`)
+          hoverMessage: new vscode.MarkdownString(`Full URL: ${url}`)
         };
       }
       return d;
