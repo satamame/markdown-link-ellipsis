@@ -8,7 +8,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // テキストの装飾方法を定義するオブジェクト
   const decorationType = vscode.window.createTextEditorDecorationType({
-    textDecoration: 'none',
+    textDecoration: 'none; display: none;',
   });
 
   // エディタごとのデコレーション情報を保持するMap
@@ -54,22 +54,26 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     const cursorPosition = editor.selection.active;
+
     const decorationsToApply = decorations.filter(d =>
       d.range.start.line !== cursorPosition.line
     ).map(d => {
       const text = editor.document.getText(d.range);
-      const match = text.match(/\[([^\]]+)\]/);
-      const linkText = match ? match[1] : 'Invalid Link';
-
-      return {
-        range: d.range,
-        renderOptions: {
-          before: { contentText: '[' + linkText + '](', color: 'inherit' },
-          after: { contentText: '...)', color: 'gray' },
-          rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
-        },
-        hoverMessage: d.hoverMessage
-      };
+      const match = text.match(/\[([^\]]+)\]\(([^\)]+)\)/);
+      if (match) {
+        const [fullMatch, linkText, url] = match;
+        return {
+          range: d.range,
+          renderOptions: {
+            before: {
+              contentText: `[${linkText}](...)`
+            },
+            rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+          },
+          hoverMessage: new vscode.MarkdownString(`${fullMatch}\n\nFull URL: ${url}`)
+        };
+      }
+      return d;
     });
 
     editor.setDecorations(decorationType, decorationsToApply);
