@@ -1,11 +1,8 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 
 // package.json で "onLanguage:markdown" を activationEvents にしているので、
 // activate 関数は最初に Markdown ファイルが開いた時に呼ばれる。
 export function activate(context: vscode.ExtensionContext) {
-
   // テキストの装飾方法を定義するオブジェクト
   const decorationType = vscode.window.createTextEditorDecorationType({
     textDecoration: 'none; display: none;',
@@ -15,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
   const decorationsMap
     = new Map<vscode.TextEditor, vscode.DecorationOptions[]>();
 
-  // Markdown ファイル内の全リンクに対して、装飾を作成または更新する。
+  // Markdown ファイル内の全リンクに対して、装飾を作成または更新する関数
   function updateDecorations(editor: vscode.TextEditor | undefined) {
     if (!editor || editor.document.languageId !== 'markdown') {
         return;
@@ -25,7 +22,7 @@ export function activate(context: vscode.ExtensionContext) {
     const linkRegex = /\[([^\]]+)\]\(([^\)]+)\)/g;
     const decorations: vscode.DecorationOptions[] = [];
 
-    // 各ハイパーリンクに対してデコレーション情報を作成する。
+    // 各ハイパーリンクに対してデコレーション対象の情報を作成する。
     let match;
     while ((match = linkRegex.exec(text))) {
         const startPos = editor.document.positionAt(match.index);
@@ -37,13 +34,14 @@ export function activate(context: vscode.ExtensionContext) {
         decorations.push(decoration);
     }
 
-    // Map にデコレーション情報を保存する。
+    // Map にデコレーション対象の情報を保存する。
     decorationsMap.set(editor, decorations);
 
     // デコレーションを適用する。
     applyDecorations(editor);
   }
 
+  // デコレーション対象の情報を使ってデコレーションを適用する関数
   function applyDecorations(editor: vscode.TextEditor | undefined) {
     if (!editor) {
       return;
@@ -53,31 +51,49 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    const cursorPosition = editor.selection.active;
+    const selections = editor.selections;
 
-    const decorationsToApply = decorations.filter(d =>
-      d.range.start.line !== cursorPosition.line
-    ).map(d => {
-      const text = editor.document.getText(d.range);
-      const match = text.match(/\[([^\]]+)\]\(([^\)]+)\)/);
-      if (match) {
-        const [_, linkText, url] = match;
-        const startOffset = editor.document.offsetAt(d.range.start);
-        const urlStartOffset = startOffset + linkText.length + 2;
-        const urlStartPos = editor.document.positionAt(urlStartOffset);
-        return {
-          range: new vscode.Range(urlStartPos, d.range.end),
-          renderOptions: {
-            before: {
-              contentText: `(...)`
+    // デコレーション対象の情報から、その対象にデコレーションするか判定する関数
+    function shouldApplyDecoration(
+      decoration: vscode.DecorationOptions
+    ): boolean {
+      return !selections.some(sel => {
+        const dStartLine = decoration.range.start.line;
+        const dEndLine = decoration.range.end.line;
+
+        if (sel.isSingleLine && sel.active.line === dStartLine) {
+          return true;
+        }
+        if (sel.start.line <= dStartLine && dEndLine <= sel.end.line) {
+          return true;
+        }
+        return false;
+      });
+    }
+
+    // デコレーション対象の情報を使って、実際に適用するデコレーションを作る。
+    const decorationsToApply = decorations.filter(shouldApplyDecoration)
+      .map(d => {
+        const text = editor.document.getText(d.range);
+        const match = text.match(/\[([^\]]+)\]\(([^\)]+)\)/);
+        if (match) {
+          const linkText = match[1];
+          const startOffset = editor.document.offsetAt(d.range.start);
+          const urlStartOffset = startOffset + linkText.length + 2;
+          const urlStartPos = editor.document.positionAt(urlStartOffset);
+          return {
+            range: new vscode.Range(urlStartPos, d.range.end),
+            renderOptions: {
+              before: {
+                contentText: `(...)`
+              },
+              rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
             },
-            rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
-          },
-          hoverMessage: new vscode.MarkdownString(`Full URL: ${url}`)
-        };
-      }
-      return d;
-    });
+            hoverMessage: d.hoverMessage
+          };
+        }
+        return d;
+      });
 
     editor.setDecorations(decorationType, decorationsToApply);
   }
@@ -110,13 +126,6 @@ export function activate(context: vscode.ExtensionContext) {
       applyDecorations(event.textEditor);
     })
   );
-
-  // TODO: これは必要か？
-  // context.subscriptions.push(
-  //   vscode.window.onDidChangeVisibleTextEditors(editors => {
-  //     editors.forEach(editor =>  updateDecorations(editor));
-  //   })
-  // );
 }
 
 // This method is called when your extension is deactivated
