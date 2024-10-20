@@ -19,29 +19,28 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     const text = editor.document.getText();
-    const linkRegex = /\[([^\]]+)\]\(([^\)]+)\)/g;
+    const linkRegex = /\[[^\]]+\]\([^\)]+\)/g;
     const decorations: vscode.DecorationOptions[] = [];
 
-    // 各ハイパーリンクに対してデコレーション対象の情報を作成する。
+    // 各ハイパーリンクに対してデコレーションの情報 (範囲) を作成する。
     let match;
     while ((match = linkRegex.exec(text))) {
         const startPos = editor.document.positionAt(match.index);
         const endPos = editor.document.positionAt(match.index + match[0].length);
         const decoration = {
-            range: new vscode.Range(startPos, endPos),
-            hoverMessage: `Full URL: ${match[2]}`
+            range: new vscode.Range(startPos, endPos)
         };
         decorations.push(decoration);
     }
 
-    // Map にデコレーション対象の情報を保存する。
+    // Map にデコレーションの情報を保存する。
     decorationsMap.set(editor, decorations);
 
     // デコレーションを適用する。
     applyDecorations(editor);
   }
 
-  // デコレーション対象の情報を使ってデコレーションを適用する関数
+  // デコレーションの範囲情報を使ってデコレーションを適用する関数
   function applyDecorations(editor: vscode.TextEditor | undefined) {
     if (!editor) {
       return;
@@ -57,6 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
     function shouldApplyDecoration(
       decoration: vscode.DecorationOptions
     ): boolean {
+      // マルチカーソルを考慮する。1個でも対象範囲にかかっていれば装飾しない。
       return !selections.some(sel => {
         const dStartLine = decoration.range.start.line;
         const dEndLine = decoration.range.end.line;
@@ -76,24 +76,30 @@ export function activate(context: vscode.ExtensionContext) {
       .map(d => {
         const text = editor.document.getText(d.range);
         const match = text.match(/\[([^\]]+)\]\(([^\)]+)\)/);
-        if (match) {
-          const linkText = match[1];
-          const startOffset = editor.document.offsetAt(d.range.start);
-          const urlStartOffset = startOffset + linkText.length + 2;
-          const urlStartPos = editor.document.positionAt(urlStartOffset);
-          return {
-            range: new vscode.Range(urlStartPos, d.range.end),
-            renderOptions: {
-              before: {
-                contentText: `(...)`
-              },
-              rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
-            },
-            hoverMessage: d.hoverMessage
-          };
+
+        // 正規表現にマッチしなければ、念のため除外する。理論上はマッチする。
+        if (!match) {
+          console.warn(`Unexpected non-matching decoration found: ${text}`);
+          return null;
         }
-        return d;
-      });
+
+        const [_, linkText, url] = match;
+        const startOffset = editor.document.offsetAt(d.range.start);
+        const urlStartOffset = startOffset + linkText.length + 2;
+        const urlStartPos = editor.document.positionAt(urlStartOffset);
+
+        return {
+          range: new vscode.Range(urlStartPos, d.range.end),
+          renderOptions: {
+            before: {
+              contentText: `(...)`
+            },
+            rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+          },
+          hoverMessage: `URL: ${url}`
+        };
+      })
+      .filter(Boolean) as vscode.DecorationOptions[];
 
     editor.setDecorations(decorationType, decorationsToApply);
   }
